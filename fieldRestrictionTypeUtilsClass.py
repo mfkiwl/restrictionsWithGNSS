@@ -157,7 +157,7 @@ class FieldRestrictionTypeUtilsMixin():
         generateGeometryUtils.setRoadName(currRestriction)
         if currRestrictionLayer.geometryType() == 1:  # Line or Bay
             generateGeometryUtils.setAzimuthToRoadCentreLine(currRestriction)
-            currRestriction.setAttribute("Restriction_Length", currRestriction.geometry().length())
+            #currRestriction.setAttribute("Restriction_Length", currRestriction.geometry().length())
 
 
         #currentCPZ, cpzWaitingTimeID = generateGeometryUtils.getCurrentCPZDetails(currRestriction)
@@ -191,8 +191,6 @@ class FieldRestrictionTypeUtilsMixin():
 
         elif currRestrictionLayer.name() == "RestrictionPolygons":
             currRestriction.setAttribute("RestrictionTypeID", self.readLastUsedDetails("RestrictionPolygons", "RestrictionTypeID", 4))  # 28 = Residential mews area (RestrictionPolygons)
-
-        pass
 
     def storeLastUsedDetails(self, layer, field, value):
         entry = '{layer}/{field}'.format(layer=layer, field=field)
@@ -233,6 +231,9 @@ class FieldRestrictionTypeUtilsMixin():
 
         button_box.rejected.connect(functools.partial(self.onRejectFieldRestrictionDetailsFromForm, restrictionDialog, currRestrictionLayer))
 
+        button_box.accepted.connect(self.deactivate)
+        button_box.rejected.connect(self.deactivate)
+        
         restrictionDialog.attributeForm().attributeChanged.connect(functools.partial(self.onAttributeChangedClass2, currRestriction, currRestrictionLayer))
 
         self.photoDetails(restrictionDialog, currRestrictionLayer, currRestriction)

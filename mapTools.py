@@ -486,11 +486,6 @@ class CreateRestrictionTool(FieldRestrictionTypeUtilsMixin, QgsMapToolCapture):
 
         if self.nrPoints > 0:
 
-            if self.layer.startEditing() == False:
-                reply = QMessageBox.information(None, "Information",
-                                                "Could not start transaction on " + self.layer.name(),
-                                                QMessageBox.Ok)
-
             # take points from the rubber band and copy them into the "feature"
 
             fields = self.layer.dataProvider().fields()
@@ -528,6 +523,10 @@ class CreateRestrictionTool(FieldRestrictionTypeUtilsMixin, QgsMapToolCapture):
 
                 # is there any other tidying to do ??
 
+                if not self.layer.startEditing():
+                    reply = QMessageBox.information(None, "Information",
+                                                    "Could not start transaction on " + self.layer.name(),
+                                                    QMessageBox.Ok)
                 #self.layer.startEditing()
                 #dialog = self.iface.getFeatureForm(self.layer, feature)
 
@@ -655,7 +654,24 @@ class CreatePointTool(FieldRestrictionTypeUtilsMixin, QgsMapToolEmitPoint ):
         x = event.pos().x()
         y = event.pos().y()
         pointLocation = self.canvas.getCoordinateTransform().toMapCoordinates(x, y)
-        QgsMessageLog.logMessage("In CreatePointTool - location" + " X: " +str(pointLocation.x()) + " Y: " + str(pointLocation.y()), tag="TOMs panel")
+
+        self.processLocation(pointLocation)
+
+    def addPointFromGPS(self, curr_gps_location, curr_gps_info):
+        QgsMessageLog.logMessage(
+            "In CreateFeatureWithGPSTool - addPointFromGPS",
+            tag="TOMs panel")
+
+        #status = self.addVertex(curr_gps_location)
+        self.processLocation(self.transformed_mapPointXY)
+
+        # TODO: opportunity to add details about GPS point to another table
+
+        return True
+
+    def processLocation(self, pointLocation):
+
+        QgsMessageLog.logMessage("In CreatePointTool - processLocation" + " X: " +str(pointLocation.x()) + " Y: " + str(pointLocation.y()), tag="TOMs panel")
 
         fields = self.currLayer.dataProvider().fields()
         feature = QgsFeature()
@@ -672,6 +688,12 @@ class CreatePointTool(FieldRestrictionTypeUtilsMixin, QgsMapToolEmitPoint ):
         self.setupFieldRestrictionDialog(dialog, self.currLayer, feature)  # connects signals, etc
 
         dialog.show()
+
+
+    def deactivate(self):
+        QgsMessageLog.logMessage(("In CreatePointTool - deactivated."), tag="TOMs panel")
+        QgsMapTool.deactivate(self)
+        self.deactivated.emit()
 
 class getMTR_PointMapTool(QgsMapToolIdentify):
 
@@ -717,3 +739,7 @@ class getMTR_PointMapTool(QgsMapToolIdentify):
 
         return nearestLink, nearestNode
 
+    def deactivate(self):
+        QgsMessageLog.logMessage(("In getMTR_PointMapTool - deactivated."), tag="TOMs panel")
+        QgsMapTool.deactivate(self)
+        self.deactivated.emit()
