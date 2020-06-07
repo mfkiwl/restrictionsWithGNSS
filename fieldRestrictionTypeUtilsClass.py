@@ -64,8 +64,9 @@ import os
 
 
 from abc import ABCMeta
-from .generateGeometryUtils import generateGeometryUtils
+from TOMs.generateGeometryUtils import generateGeometryUtils
 from TOMs.restrictionTypeUtilsClass import (TOMsParams, TOMsLayers)
+from TOMs.ui.TOMsCamera import formCamera
 
 try:
     import cv2
@@ -274,9 +275,9 @@ class FieldRestrictionTypeUtilsMixin():
         QgsMessageLog.logMessage("In onSaveFieldRestrictionDetails: ", tag="TOMs panel")
 
         try:
-            self.camera1.endCamera()
-            self.camera2.endCamera()
-            self.camera3.endCamera()
+            self.camera1.closeCameraForm()
+            self.camera2.closeCameraForm()
+            self.camera3.closeCameraForm()
         except:
             None
 
@@ -358,33 +359,24 @@ class FieldRestrictionTypeUtilsMixin():
         except:
             reply = QMessageBox.information(None, "Information", "Problem committing changes" + str(currFeatureLayer.commitErrors()), QMessageBox.Ok)
 
-        #currFeatureLayer.blockSignals(False)
-
         QgsMessageLog.logMessage("In onSaveDemandDetails: changes committed", tag="TOMs panel")
 
         status = dialog.close()
-        #self.mapTool = None
         self.iface.mapCanvas().unsetMapTool(self.iface.mapCanvas().mapTool())
 
     def onRejectFieldRestrictionDetailsFromForm(self, restrictionDialog, currFeatureLayer):
         QgsMessageLog.logMessage("In onRejectFieldRestrictionDetailsFromForm", tag="TOMs panel")
 
         try:
-            self.camera1.endCamera()
-            self.camera2.endCamera()
-            self.camera3.endCamera()
+            self.camera1.closeCameraForm()
+            self.camera2.closeCameraForm()
+            self.camera3.closeCameraForm()
         except:
             None
 
         currFeatureLayer.rollBack()
         restrictionDialog.reject()
-
-        #del self.mapTool
-
-        """def onRejectFieldRestrictionDetailsFromForm(self, restrictionDialog):
-        QgsMessageLog.logMessage("In onRejectFieldRestrictionDetailsFromForm", tag="TOMs panel")
-
-        restrictionDialog.reject()"""
+        self.demandDialog.close()
 
     def photoDetails(self, restrictionDialog, currRestrictionLayer, currRestriction):
 
@@ -400,23 +392,24 @@ class FieldRestrictionTypeUtilsMixin():
         FIELD2 = self.demandDialog.findChild(QLabel, "Photo_Widget_02")
         FIELD3 = self.demandDialog.findChild(QLabel, "Photo_Widget_03")
 
+        # sort out path for Photos
         photoPath = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('PhotoPath')
-        projectFolder = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('project_folder')
-
-        """ v2.18
-        photoPath = QgsExpressionContextUtils.projectScope().variable('PhotoPath')
-        projectFolder = QgsExpressionContextUtils.projectScope().variable('project_folder')
-        """
-        path_absolute = os.path.join(projectFolder, photoPath)
-
-        if path_absolute == None:
+        QgsMessageLog.logMessage("In photoDetails. '{}'".format(photoPath),
+                                 tag="TOMs panel", level=Qgis.Info)
+        if len(str(photoPath)) <= 0:
             reply = QMessageBox.information(None, "Information", "Please set value for PhotoPath.", QMessageBox.Ok)
             return
 
-        # Check path exists ...
-        if os.path.isdir(path_absolute) == False:
-            reply = QMessageBox.information(None, "Information", "PhotoPath folder " + str(
-                path_absolute) + " does not exist. Please check value.", QMessageBox.Ok)
+        if os.path.isabs(photoPath):
+            path_absolute = photoPath
+        else:
+            projectPath = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('project_home')
+            path_absolute = os.path.abspath(os.path.join(projectPath, photoPath))
+        QgsMessageLog.logMessage("In photoDetails. '{}' {}".format(projectPath, path_absolute),
+                                 tag="TOMs panel", level=Qgis.Info)
+        # check that the path exists
+        if not os.path.isdir(path_absolute):
+            reply = QMessageBox.information(None, "Information", "Did not find value for project path.", QMessageBox.Ok)
             return
 
         layerName = self.currDemandLayer.name()
@@ -568,161 +561,3 @@ class FieldRestrictionTypeUtilsMixin():
                 reply = QMessageBox.information(None, "Error",
                                                 "savePhotoTaken. problem changing attrib value",
                                                 QMessageBox.Ok)
-
-class formCamera(QObject):
-    notifyPhotoTaken = QtCore.pyqtSignal(str)
-
-    def __init__(self, path_absolute, currFileName):
-        QtCore.QObject.__init__(self)
-        self.path_absolute = path_absolute
-        self.currFileName = currFileName
-        self.camera = cvCamera()
-
-    @pyqtSlot(QPixmap)
-    def displayFrame(self, pixmap):
-        # QgsMessageLog.logMessage("In formCamera::displayFrame ... ", tag="TOMs panel")
-        self.FIELD.setPixmap(pixmap)
-        self.FIELD.setScaledContents(True)
-        QtGui.QApplication.processEvents()  # processes the event queue - https://stackoverflow.com/questions/43094589/opencv-imshow-prevents-qt-python-crashing
-
-    def useCamera(self, START_CAMERA_BUTTON, TAKE_PHOTO_BUTTON, FIELD):
-        QgsMessageLog.logMessage("In formCamera::useCamera ... ", tag="TOMs panel")
-        self.START_CAMERA_BUTTON = START_CAMERA_BUTTON
-        self.TAKE_PHOTO_BUTTON = TAKE_PHOTO_BUTTON
-        self.FIELD = FIELD
-
-        # self.blockSignals(True)
-        self.START_CAMERA_BUTTON.clicked.disconnect()
-        self.START_CAMERA_BUTTON.clicked.connect(self.endCamera)
-
-        """ Camera code  """
-
-        self.camera.changePixmap.connect(self.displayFrame)
-        self.camera.closeCamera.connect(self.endCamera)
-
-        self.TAKE_PHOTO_BUTTON.setEnabled(True)
-        self.TAKE_PHOTO_BUTTON.clicked.connect(functools.partial(self.camera.takePhoto, self.path_absolute))
-        self.camera.photoTaken.connect(self.checkPhotoTaken)
-        self.photoTaken = False
-
-        QgsMessageLog.logMessage("In formCamera::useCamera: starting camera ... ", tag="TOMs panel")
-
-        self.camera.startCamera()
-
-    def endCamera(self):
-
-        QgsMessageLog.logMessage("In formCamera::endCamera: stopping camera ... ", tag="TOMs panel")
-
-        self.camera.stopCamera()
-        self.camera.changePixmap.disconnect(self.displayFrame)
-        self.camera.closeCamera.disconnect(self.endCamera)
-
-        # del self.camera
-
-        self.TAKE_PHOTO_BUTTON.setEnabled(False)
-        self.START_CAMERA_BUTTON.setChecked(False)
-        self.TAKE_PHOTO_BUTTON.clicked.disconnect()
-
-        self.START_CAMERA_BUTTON.clicked.disconnect()
-        self.START_CAMERA_BUTTON.clicked.connect(
-            functools.partial(self.useCamera, self.START_CAMERA_BUTTON, self.TAKE_PHOTO_BUTTON, self.FIELD))
-
-        if self.photoTaken == False:
-            self.resetPhoto()
-
-    @pyqtSlot(str)
-    def checkPhotoTaken(self, fileName):
-        QgsMessageLog.logMessage("In formCamera::photoTaken: file: " + fileName, tag="TOMs panel")
-
-        if len(fileName) > 0:
-            self.photoTaken = True
-            self.notifyPhotoTaken.emit(fileName)
-        else:
-            self.resetPhoto()
-            self.photoTaken = False
-
-    def resetPhoto(self):
-        QgsMessageLog.logMessage("In formCamera::resetPhoto ... ", tag="TOMs panel")
-
-        pixmap = QPixmap(self.currFileName)
-        if pixmap.isNull():
-            pass
-        else:
-            self.FIELD.setPixmap(pixmap)
-            self.FIELD.setScaledContents(True)
-
-
-class cvCamera(QThread):
-    changePixmap = pyqtSignal(QPixmap)
-    closeCamera = pyqtSignal()
-    photoTaken = pyqtSignal(str)
-
-    def __init__(self):
-        QThread.__init__(self)
-
-    def stopCamera(self):
-        QgsMessageLog.logMessage("In cvCamera::stopCamera ... ", tag="TOMs panel")
-        self.cap.release()
-
-    def startCamera(self):
-
-        QgsMessageLog.logMessage("In cvCamera::startCamera: ... ", tag="TOMs panel")
-
-        self.cap = cv2.VideoCapture(0)  # video capture source camera (Here webcam of laptop)
-
-        self.cap.set(3, 640)  # width=640
-        self.cap.set(4, 480)  # height=480
-
-        while self.cap.isOpened():
-            self.getFrame()
-            # cv2.imshow('img1',self.frame) #display the captured image
-            # cv2.waitKey(1)
-            time.sleep(0.1)  # QTimer::singleShot()
-        else:
-            QgsMessageLog.logMessage("In cvCamera::startCamera: camera closed ... ", tag="TOMs panel")
-            self.closeCamera.emit()
-
-    def getFrame(self):
-
-        """ Camera code  """
-
-        # QgsMessageLog.logMessage("In cvCamera::getFrame ... ", tag="TOMs panel")
-
-        ret, self.frame = self.cap.read()  # return a single frame in variable `frame`
-
-        if ret == True:
-            # Need to change from BRG (cv::mat) to RGB image
-            cvRGBImg = cv2.cvtColor(self.frame, cv2.cv.CV_BGR2RGB)
-            qimg = QtGui.QImage(cvRGBImg.data, cvRGBImg.shape[1], cvRGBImg.shape[0], QtGui.QImage.Format_RGB888)
-
-            # Now display ...
-            pixmap = QtGui.QPixmap.fromImage(qimg)
-
-            self.changePixmap.emit(pixmap)
-
-        else:
-
-            QgsMessageLog.logMessage("In cvCamera::useCamera: frame not returned ... ", tag="TOMs panel")
-            self.closeCamera.emit()
-
-    def takePhoto(self, path_absolute):
-
-        QgsMessageLog.logMessage("In cvCamera::takePhoto ... ", tag="TOMs panel")
-        # Save frame to file
-
-        fileName = 'Photo_{}.png'.format(datetime.datetime.now().strftime('%Y%m%d_%H%M%S%z'))
-        newPhotoFileName = os.path.join(path_absolute, fileName)
-
-        QgsMessageLog.logMessage("Saving photo: file: " + newPhotoFileName, tag="TOMs panel")
-        writeStatus = cv2.imwrite(newPhotoFileName, self.frame)
-
-        if writeStatus is True:
-            reply = QMessageBox.information(None, "Information", "Photo captured.", QMessageBox.Ok)
-            self.photoTaken.emit(newPhotoFileName)
-        else:
-            reply = QMessageBox.information(None, "Information", "Problem taking photo.", QMessageBox.Ok)
-            self.photoTaken.emit()
-
-        # Now stop camera (and display image)
-
-        self.cap.release()

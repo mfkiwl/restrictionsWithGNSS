@@ -663,7 +663,7 @@ class CreatePointTool(FieldRestrictionTypeUtilsMixin, QgsMapToolEmitPoint ):
             tag="TOMs panel")
 
         #status = self.addVertex(curr_gps_location)
-        self.processLocation(self.transformed_mapPointXY)
+        self.processLocation(curr_gps_location)
 
         # TODO: opportunity to add details about GPS point to another table
 
@@ -680,6 +680,15 @@ class CreatePointTool(FieldRestrictionTypeUtilsMixin, QgsMapToolEmitPoint ):
         feature.setGeometry(QgsGeometry.fromPointXY(pointLocation))
 
         self.setDefaultFieldRestrictionDetails(feature, self.currLayer, QDate.currentDate())
+
+        if not self.currLayer.startEditing():
+            reply = QMessageBox.information(None, "Information",
+                                            "Could not start transaction on " + self.currLayer.name(),
+                                            QMessageBox.Ok)
+
+        QgsMessageLog.logMessage(
+            "In CreatePointTool - processLocation. currLayer: " + str(self.currLayer.name()),
+            tag="TOMs panel")
 
         self.currLayer.addFeature(feature)  # TH (added for v3)
 
