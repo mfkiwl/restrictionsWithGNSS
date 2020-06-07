@@ -442,8 +442,8 @@ class captureGPSFeatures(FieldRestrictionTypeUtilsMixin):
                                                 QMessageBox.Ok)
                 return
 
-        self.dialog = self.iface.getFeatureForm(closestLayer, closestFeature)
-        self.setupFieldRestrictionDialog(self.dialog, closestLayer, closestFeature)
+        #self.dialog = self.iface.getFeatureForm(closestLayer, closestFeature)
+        self.setupFieldRestrictionDialog(closestLayer, closestFeature)
 
         self.dialog.show()
 

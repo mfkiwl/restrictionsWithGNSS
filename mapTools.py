@@ -553,15 +553,14 @@ class CreateRestrictionTool(FieldRestrictionTypeUtilsMixin, QgsMapToolCapture):
                 feature[self.layer.fields().indexFromName("GeometryID")] = newRestrictionID
                 self.layer.addFeature(feature)  # TH (added for v3)
 
-                dialog = self.iface.getFeatureForm(self.layer, feature)
+                #dialog = self.iface.getFeatureForm(self.layer, feature)
 
-                self.setupFieldRestrictionDialog(dialog, self.layer, feature)  # connects signals, etc
+                self.setupFieldRestrictionDialog(self.layer, feature)  # connects signals, etc
 
                 self.inProcess = False
-                dialog.show()
+                self.dialog.show()
                 #self.iface.openFeatureForm(self.layer, feature, False, False)
-
-            pass
+        self.deactivate()
 
         #def onAttributeChanged(self, feature, fieldName, value):
         # QgsMessageLog.logMessage("In restrictionFormOpen:onAttributeChanged - layer: " + str(layer.name()) + " (" + str(feature.attribute("RestrictionID")) + "): " + fieldName + ": " + str(value), tag="TOMs panel")
@@ -692,11 +691,13 @@ class CreatePointTool(FieldRestrictionTypeUtilsMixin, QgsMapToolEmitPoint ):
 
         self.currLayer.addFeature(feature)  # TH (added for v3)
 
-        dialog = self.iface.getFeatureForm(self.currLayer, feature)
+        #dialog = self.iface.getFeatureForm(self.currLayer, feature)
 
-        self.setupFieldRestrictionDialog(dialog, self.currLayer, feature)  # connects signals, etc
+        self.setupFieldRestrictionDialog(self.currLayer, feature)  # connects signals, etc
 
-        dialog.show()
+        self.dialog.show()
+
+        self.deactivate()
 
 
     def deactivate(self):

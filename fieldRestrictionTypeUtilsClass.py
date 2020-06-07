@@ -169,6 +169,7 @@ class FieldRestrictionTypeUtilsMixin():
         #config.setInitFilePath("py_file.py")
         #config.setInitFunction("method_name")
         currRestrictionLayer.setEditFormConfig(config)
+        #self.dialog = self.iface.getFeatureForm(closestLayer, closestFeature)
 
         generateGeometryUtils.setRoadName(currRestriction)
         if currRestrictionLayer.geometryType() == 1:  # Line or Bay
@@ -215,24 +216,25 @@ class FieldRestrictionTypeUtilsMixin():
         QgsMessageLog.logMessage("In readLastUsedDetails: " + str(entry) + " (" + str(default) + ")", tag="TOMs panel")
         return self.settings.value(entry, default)
 
-    def setupFieldRestrictionDialog(self, restrictionDialog, currRestrictionLayer, currRestriction):
+    def setupFieldRestrictionDialog(self, currRestrictionLayer, currRestriction):
 
         #self.restrictionDialog = restrictionDialog
         #self.currRestrictionLayer = currRestrictionLayer
         #self.currRestriction = currRestriction
         #self.restrictionTransaction = restrictionTransaction
+        self.dialog = self.iface.getFeatureForm(currRestrictionLayer, currRestriction)
 
         # Create a copy of the feature
         self.origFeature = originalFeature()
         self.origFeature.setFeature(currRestriction)
 
-        if restrictionDialog is None:
+        if self.dialog is None:
             QgsMessageLog.logMessage(
                 "In setupRestrictionDialog. dialog not found",
                 tag="TOMs panel")
 
-        restrictionDialog.attributeForm().disconnectButtonBox()
-        button_box = restrictionDialog.findChild(QDialogButtonBox, "button_box")
+        self.dialog.attributeForm().disconnectButtonBox()
+        button_box = self.dialog.findChild(QDialogButtonBox, "button_box")
 
         if button_box is None:
             QgsMessageLog.logMessage(
@@ -240,16 +242,16 @@ class FieldRestrictionTypeUtilsMixin():
                 tag="TOMs panel")
 
         button_box.accepted.connect(functools.partial(self.onSaveFieldRestrictionDetails, currRestriction,
-                                      currRestrictionLayer, restrictionDialog))
+                                      currRestrictionLayer, self.dialog))
 
-        button_box.rejected.connect(functools.partial(self.onRejectFieldRestrictionDetailsFromForm, restrictionDialog, currRestrictionLayer))
+        button_box.rejected.connect(functools.partial(self.onRejectFieldRestrictionDetailsFromForm, self.dialog, currRestrictionLayer))
 
-        button_box.accepted.connect(self.deactivate)
-        button_box.rejected.connect(self.deactivate)
+        #button_box.accepted.connect(self.deactivate)
+        #button_box.rejected.connect(self.deactivate)
         
-        restrictionDialog.attributeForm().attributeChanged.connect(functools.partial(self.onAttributeChangedClass2, currRestriction, currRestrictionLayer))
+        self.dialog.attributeForm().attributeChanged.connect(functools.partial(self.onAttributeChangedClass2, currRestriction, currRestrictionLayer))
 
-        self.photoDetails(restrictionDialog, currRestrictionLayer, currRestriction)
+        self.photoDetails(self.dialog, currRestrictionLayer, currRestriction)
 
         """def onSaveRestrictionDetailsFromForm(self):
         QgsMessageLog.logMessage("In onSaveRestrictionDetailsFromForm", tag="TOMs panel")

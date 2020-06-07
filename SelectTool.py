@@ -59,10 +59,12 @@ from qgis.PyQt.QtCore import (
 from qgis.core import (
     QgsMessageLog,
     QgsExpressionContextUtils,
-    QgsWkbTypes
+    QgsWkbTypes,
+QgsVectorLayer, QgsFeature, QgsMapLayer, QgsRectangle, QgsFeatureRequest
+
 )
 from qgis.core import *
-from qgis.gui import *
+from qgis.gui import (QgsMapToolIdentify)
 
 #from .formUtils import demandFormUtils
 
@@ -70,7 +72,7 @@ from qgis.gui import *
 
 class GeometryInfoMapTool(QgsMapToolIdentify):
 
-    notifyFeatureFound = QtCore.pyqtSignal(QgsVectorLayer, QgsFeature)
+    notifyFeatureFound = pyqtSignal(QgsVectorLayer, QgsFeature)
 
     def __init__(self, iface):
         QgsMapToolIdentify.__init__(self, iface.mapCanvas())
