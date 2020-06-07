@@ -2,4 +2,5 @@
 .idea
 *.orig
 /venv/
+/__pycache__/
 

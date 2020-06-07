@@ -22,9 +22,6 @@
     <list default="true" id="dfc122fa-973f-4fd8-8852-2253bfd513b4" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/fieldRestrictionTypeUtilsClass.py" beforeDir="false" afterPath="$PROJECT_DIR$/fieldRestrictionTypeUtilsClass.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/manage_feature_creation.py" beforeDir="false" afterPath="$PROJECT_DIR$/manage_feature_creation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mapTools.py" beforeDir="false" afterPath="$PROJECT_DIR$/mapTools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mapTools_218.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

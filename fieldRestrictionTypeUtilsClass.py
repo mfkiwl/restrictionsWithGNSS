@@ -53,7 +53,8 @@ from qgis.core import (
     QgsTransaction,
     QgsTransactionGroup,
     QgsProject,
-    QgsSettings
+    QgsSettings, Qgis,
+    QgsEditFormConfig
 )
 
 from qgis.gui import *
@@ -67,6 +68,7 @@ from abc import ABCMeta
 from TOMs.generateGeometryUtils import generateGeometryUtils
 from TOMs.restrictionTypeUtilsClass import (TOMsParams, TOMsLayers)
 from TOMs.ui.TOMsCamera import formCamera
+from TOMs.core.TOMsMessageLog import TOMsMessageLog
 
 try:
     import cv2
@@ -155,16 +157,26 @@ class FieldRestrictionTypeUtilsMixin():
         except Exception:
             None
 
+        # set up form details
+        config = currRestrictionLayer.editFormConfig()
+        #config.setInitCodeSource( QgsEditFormConfig.CodeSourceEnvironment )
+
+        basePath = os.path.dirname(os.path.realpath(__file__))
+        formPath = os.path.abspath(os.path.join(basePath, '.\\ui\\{}.ui'.format(currRestrictionLayer.name())))
+        config.setUiForm(formPath)
+        #config.setLayout(QgsEditFormConfig.EditorLayout.UiFileLayout)
+        QgsMessageLog.logMessage("In setDefaultFieldRestrictionDetails: formName = {}".format(formPath), tag="TOMs panel")
+        #config.setInitFilePath("py_file.py")
+        #config.setInitFunction("method_name")
+        currRestrictionLayer.setEditFormConfig(config)
+
         generateGeometryUtils.setRoadName(currRestriction)
         if currRestrictionLayer.geometryType() == 1:  # Line or Bay
             generateGeometryUtils.setAzimuthToRoadCentreLine(currRestriction)
             #currRestriction.setAttribute("Restriction_Length", currRestriction.geometry().length())
 
-
         #currentCPZ, cpzWaitingTimeID = generateGeometryUtils.getCurrentCPZDetails(currRestriction)
-
         #currRestriction.setAttribute("CPZ", currentCPZ)
-
         #currDate = self.proposalsManager.date()
 
         if currRestrictionLayer.name() == "Lines":
@@ -394,8 +406,8 @@ class FieldRestrictionTypeUtilsMixin():
 
         # sort out path for Photos
         photoPath = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('PhotoPath')
-        QgsMessageLog.logMessage("In photoDetails. '{}'".format(photoPath),
-                                 tag="TOMs panel", level=Qgis.Info)
+        TOMsMessageLog.logMessage("In photoDetails. '{}'".format(photoPath),
+                                 level=Qgis.Info)
         if len(str(photoPath)) <= 0:
             reply = QMessageBox.information(None, "Information", "Please set value for PhotoPath.", QMessageBox.Ok)
             return
@@ -405,8 +417,8 @@ class FieldRestrictionTypeUtilsMixin():
         else:
             projectPath = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('project_home')
             path_absolute = os.path.abspath(os.path.join(projectPath, photoPath))
-        QgsMessageLog.logMessage("In photoDetails. '{}' {}".format(projectPath, path_absolute),
-                                 tag="TOMs panel", level=Qgis.Info)
+        TOMsMessageLog.logMessage("In photoDetails. '{}' {}".format(projectPath, path_absolute),
+                                 level=Qgis.Info)
         # check that the path exists
         if not os.path.isdir(path_absolute):
             reply = QMessageBox.information(None, "Information", "Did not find value for project path.", QMessageBox.Ok)
