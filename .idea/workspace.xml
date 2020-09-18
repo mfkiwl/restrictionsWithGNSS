@@ -20,8 +20,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2094ee45-18da-4c12-b946-fd1ca9d6b40e" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/ui/Lines_field_simple.ui" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ui/Signs_field_simple.ui" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/fieldRestrictionTypeUtilsClass.py" beforeDir="false" afterPath="$PROJECT_DIR$/fieldRestrictionTypeUtilsClass.py" afterDir="false" />
     </list>
