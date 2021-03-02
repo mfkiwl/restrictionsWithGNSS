@@ -3,4 +3,5 @@
 *.orig
 /venv/
 /__pychache__/
+*.qgs~
 

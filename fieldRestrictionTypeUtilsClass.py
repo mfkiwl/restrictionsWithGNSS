@@ -28,7 +28,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtGui import (
     QIcon,
     QPixmap,
-    QImage
+    QImage, QPainter
 )
 
 from qgis.PyQt.QtCore import (
@@ -70,7 +70,7 @@ from TOMs.generateGeometryUtils import generateGeometryUtils
 from TOMs.restrictionTypeUtilsClass import (TOMsParams, TOMsLayers, originalFeature, RestrictionTypeUtilsMixin)
 
 from TOMs.ui.TOMsCamera import (formCamera)
-from .ui.imageLabel import (imageLabel)
+from restrictionsWithGNSS.ui.imageLabel import (imageLabel)
 
 cv2_available = True
 try:
@@ -82,6 +82,9 @@ except ImportError:
 import uuid
 from TOMs.core.TOMsMessageLog import TOMsMessageLog
 
+ZOOM_LIMIT = 5
+
+"""
 class gpsLayers(TOMsLayers):
     def __init__(self, iface):
         TOMsLayers.__init__(self, iface)
@@ -135,7 +138,8 @@ class gpsLayers(TOMsLayers):
             "DisplayBoards",
             "EV_ChargingPoints",
             "StreetNamePlates",
-            "SubterraneanFeatures",
+            "SubterraneanFeatures (point)",
+            "SubterraneanFeatures (in a line)",
             "TrafficSignals",
             "UnidentifiedStaticObjects",
             "VehicleBarriers",
@@ -174,11 +178,12 @@ class gpsLayers(TOMsLayers):
             "TurnRestrictions",
             "vehicleQualifiers",
             "MHTC_RoadLinks",
-            "GNSS_Pts"
-
+            "GNSS_Pts",
+            "MHTC_Kerblines"
                          ]
         self.TOMsLayerDict = {}
 
+"""
 class gpsParams(TOMsParams):
     def __init__(self):
         TOMsParams.__init__(self)
@@ -224,8 +229,9 @@ class FieldRestrictionTypeUtilsMixin():
             generateGeometryUtils.setAzimuthToRoadCentreLine(currRestriction)
             currRestriction.setAttribute("RestrictionLength", currRestriction.geometry().length())"""
 
-
-        currentCPZ, cpzWaitingTimeID, cpzMatchDayTimePeriodID = generateGeometryUtils.getCurrentCPZDetails(currRestriction)
+        currentCPZ, cpzWaitingTimeID = generateGeometryUtils.getCurrentCPZDetails(currRestriction)
+        currentED, edWaitingTimeID = generateGeometryUtils.getCurrentEventDayDetails(currRestriction)
+        #currentCPZ, cpzWaitingTimeID, cpzMatchDayTimePeriodID = generateGeometryUtils.getCurrentCPZDetails(currRestriction)
         """TOMsMessageLog.logMessage(
             "In setDefaultFieldRestrictionDetails. CPZ found: {}: control: {}".format(currentCPZ, cpzWaitingTimeID),
             level=Qgis.Warning)"""
@@ -249,7 +255,8 @@ class FieldRestrictionTypeUtilsMixin():
             currRestriction.setAttribute("RestrictionLength", currRestriction.geometry().length())
 
             currRestriction.setAttribute("CPZ", currentCPZ)
-            currRestriction.setAttribute("MatchDayTimePeriodID", cpzMatchDayTimePeriodID)
+            currRestriction.setAttribute("MatchDayEventDayZone", currentED)
+            currRestriction.setAttribute("MatchDayTimePeriodID", edWaitingTimeID)
 
             currRestriction.setAttribute("ComplianceRestrictionSignIssue", 1)  # No issue
             currRestriction.setAttribute("ComplianceRoadMarkingsFaded", 1)  # No issue
@@ -268,14 +275,25 @@ class FieldRestrictionTypeUtilsMixin():
             currRestriction.setAttribute("RestrictionLength", currRestriction.geometry().length())
 
             currRestriction.setAttribute("CPZ", currentCPZ)
-            currRestriction.setAttribute("MatchDayTimePeriodID", cpzMatchDayTimePeriodID)
+            currRestriction.setAttribute("MatchDayEventDayZone", currentED)
+            currRestriction.setAttribute("MatchDayTimePeriodID", edWaitingTimeID)
 
             currRestriction.setAttribute("ComplianceRestrictionSignIssue", 1)  # No issue
             currRestriction.setAttribute("ComplianceRoadMarkingsFaded", 1)  # No issue
 
+            try:
+                payParkingAreasLayer = QgsProject.instance().mapLayersByName("PayParkingAreas")[0]
+                currPayParkingArea = generateGeometryUtils.getPolygonForRestriction(currRestriction,
+                                                                                    payParkingAreasLayer)
+                currRestriction.setAttribute("PayParkingAreaID", currPayParkingArea.attribute("Code"))
+            except Exception as e:
+                TOMsMessageLog.logMessage(
+                    "In setDefaultFieldRestrictionDetails. issue obtaining PayParkingAreaID: {}".format(e),
+                    level=Qgis.Info)
+
         elif currRestrictionLayer.name() == "Signs":
             currRestriction.setAttribute("SignType_1", self.readLastUsedDetails("Signs", "SignType_1", 28))  # 28 = Permit Holders Only (Signs)
-            #currRestriction.setAttribute("SignOrientationTypeID", NULL)
+            currRestriction.setAttribute("SignOrientationTypeID", 3)
             currRestriction.setAttribute("SignConditionTypeID", 1)  # 1 = Good
             currRestriction.setAttribute("ComplianceRestrictionSignIssue", 1)  # No issue
 
@@ -283,7 +301,8 @@ class FieldRestrictionTypeUtilsMixin():
             currRestriction.setAttribute("RestrictionTypeID", self.readLastUsedDetails("RestrictionPolygons", "RestrictionTypeID", 4))  # 28 = Residential mews area (RestrictionPolygons)
 
             currRestriction.setAttribute("CPZ", currentCPZ)
-            currRestriction.setAttribute("MatchDayTimePeriodID", cpzMatchDayTimePeriodID)
+            currRestriction.setAttribute("MatchDayEventDayZone", currentED)
+            currRestriction.setAttribute("MatchDayTimePeriodID", edWaitingTimeID)
 
             currRestriction.setAttribute("GeomShapeID", self.readLastUsedDetails("Lines", "GeomShapeID", 50))   # 10 = Parallel Line
             currRestriction.setAttribute("ComplianceRestrictionSignIssue", 1)  # No issue
@@ -401,6 +420,15 @@ class FieldRestrictionTypeUtilsMixin():
         except:
             None
 
+        # deal with issue whereby a null field provided by PayParkingAreaID is a 0 length string (rather than integer)
+
+        if currFeatureLayer.name() == "Bays":
+            try:
+                if len (currFeature[currFeatureLayer.fields().indexFromName("PayParkingAreaID")].strip()) == 0:
+                    currFeature[currFeatureLayer.fields().indexFromName("PayParkingAreaID")] = None
+            except:
+                None
+                
         attrs1 = currFeature.attributes()
         TOMsMessageLog.logMessage("In onSaveDemandDetails: currRestriction: " + str(attrs1),
                                  level=Qgis.Warning)
@@ -471,17 +499,9 @@ class FieldRestrictionTypeUtilsMixin():
 
         TOMsMessageLog.logMessage("In photoDetails", level=Qgis.Info)
 
-        FIELD1 = self.demandDialog.findChild(QLabel, "Photo_Widget_01")
-        FIELD2 = self.demandDialog.findChild(QLabel, "Photo_Widget_02")
-        FIELD3 = self.demandDialog.findChild(QLabel, "Photo_Widget_03")
-
         photoPath = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('PhotoPath')
         projectFolder = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable('project_folder')
 
-        """ v2.18
-        photoPath = QgsExpressionContextUtils.projectScope().variable('PhotoPath')
-        projectFolder = QgsExpressionContextUtils.projectScope().variable('project_folder')
-        """
         path_absolute = os.path.join(projectFolder, photoPath)
 
         if path_absolute == None:
@@ -498,7 +518,7 @@ class FieldRestrictionTypeUtilsMixin():
         try:
             cameraNr = int(self.params.setParam("CameraNr"))
         except Exception as e:
-            TOMsMessageLog.logMessage("In formCamera:init: cameraNr issue: {}".format(e), level=Qgis.Warning)
+            TOMsMessageLog.logMessage("In photoDetails_field: cameraNr issue: {}".format(e), level=Qgis.Info)
             if cv2_available:
                 cameraNr = QMessageBox.information(None, "Information", "Please set value for CameraNr.", QMessageBox.Ok)
             cameraNr = None
@@ -527,29 +547,12 @@ class FieldRestrictionTypeUtilsMixin():
             TOMsMessageLog.logMessage("Camera FALSE", level=Qgis.Info)
             takePhoto = False
 
-        """tab = FIELD1.parentWidget()
-        grid = FIELD1.parentWidget().layout()
-        FIELD1.setParent(None)
-
-        photo_Widget1 = imageLabel(tab)
-        photo_Widget1.setObjectName("Photo_Widget_01")
-        #grid = self.demandDialog.findChild(QGridLayout, "gridLayout_2")
-        grid.addWidget(photo_Widget1, 0, 0, 1, 1)
-        #grid.replaceWidget(FIELD1, photo_Widget1)
-        photo_Widget1.setText("No photo is here")"""
-
-        """sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        #sizePolicy.setHeightForWidth(sizePolicy().hasHeightForWidth())
-        photo_Widget1.setSizePolicy(sizePolicy)
-        photo_Widget1.setAutoFillBackground(True)"""
-
-        #FIELD1 = self.demandDialog.findChild(QLabel, "Photo_Widget_01")
-        #FIELD1 = photo_Widget1
-        #QtGui.QApplication.processEvents()  # processes the event queue - https://stackoverflow.com/questions/43094589/opencv-imshow-prevents-qt-python-crashing
+        FIELD1 = self.demandDialog.findChild(QLabel, "Photo_Widget_01")
+        FIELD2 = self.demandDialog.findChild(QLabel, "Photo_Widget_02")
+        FIELD3 = self.demandDialog.findChild(QLabel, "Photo_Widget_03")
 
         if FIELD1:
+
             TOMsMessageLog.logMessage("In photoDetails. FIELD 1 exists",
                                      level=Qgis.Info)
             if self.currFeature[idx1]:
@@ -558,16 +561,29 @@ class FieldRestrictionTypeUtilsMixin():
             else:
                 newPhotoFileName1 = None
 
-            # TOMsMessageLog.logMessage("In photoDetails. Photo1: " + str(newPhotoFileName1), level=Qgis.Info)
             pixmap1 = QPixmap(newPhotoFileName1)
-            if pixmap1.isNull():
-                pass
-                # FIELD1.setText('Picture could not be opened ({path})'.format(path=newPhotoFileName1))
-            else:
-                FIELD1.setPixmap(pixmap1)
-                FIELD1.setScaledContents(True)
-                #FIELD1.set_image(pixmap1)
-                TOMsMessageLog.logMessage("In photoDetails. FIELD 1 Photo1: " + str(newPhotoFileName1), level=Qgis.Info)
+
+            tab = FIELD1.parentWidget()
+            grid = FIELD1.parentWidget().layout()
+
+            photo_Widget1 = imageLabel(tab)
+            TOMsMessageLog.logMessage(
+                "In photoDetails. FIELD 1 w: {}; h: {}".format(FIELD1.width(), FIELD1.height()), level=Qgis.Info)
+            photo_Widget1.setObjectName("Photo_Widget_01")
+            photo_Widget1.setText("No photo is here")
+            #photo_Widget1 = imageLabel(tab)
+            grid.addWidget(photo_Widget1, 0, 0, 1, 1)
+
+            FIELD1.hide()
+            FIELD1.setParent(None)
+            FIELD1 = photo_Widget1
+            FIELD1.set_Pixmap(pixmap1)
+
+            TOMsMessageLog.logMessage("In photoDetails. FIELD 1 Photo1: " + str(newPhotoFileName1), level=Qgis.Info)
+            TOMsMessageLog.logMessage("In photoDetails.pixmap1 size: {}".format(pixmap1.size()),
+                                      level=Qgis.Info)
+
+            FIELD1.pixmapUpdated.connect(functools.partial(self.displayPixmapUpdated, FIELD1))
 
             if takePhoto:
                 START_CAMERA_1 = self.demandDialog.findChild(QPushButton, "startCamera1")
@@ -578,15 +594,7 @@ class FieldRestrictionTypeUtilsMixin():
                 START_CAMERA_1.clicked.connect(
                     functools.partial(self.camera1.useCamera, START_CAMERA_1, TAKE_PHOTO_1, FIELD1))
                 self.camera1.notifyPhotoTaken.connect(functools.partial(self.savePhotoTaken, idx1))
-
-        """photo_Widget2 = imageLabel()
-
-        photo_Widget2.setObjectName("Photo_Widget_02")
-        grid = self.demandDialog.findChild(QGridLayout, "gridLayout_4")
-        grid.addWidget(photo_Widget2, 0, 0, 1, 1)
-        photo_Widget2.setText("No photo")
-
-        FIELD2 = photo_Widget2"""
+                self.camera1.pixmapUpdated.connect(functools.partial(self.displayImage, FIELD1))
 
         if FIELD2:
             TOMsMessageLog.logMessage("In photoDetails. FIELD 2 exisits",
@@ -597,17 +605,29 @@ class FieldRestrictionTypeUtilsMixin():
             else:
                 newPhotoFileName2 = None
 
-            # newPhotoFileName2 = os.path.join(path_absolute, str(self.currFeature[idx2]))
-            # newPhotoFileName2 = os.path.join(path_absolute, str(self.currFeature.attribute(fileName2)))
-            # TOMsMessageLog.logMessage("In photoDetails. Photo2: " + str(newPhotoFileName2), level=Qgis.Info)
             pixmap2 = QPixmap(newPhotoFileName2)
-            if pixmap2.isNull():
-                pass
-                # FIELD1.setText('Picture could not be opened ({path})'.format(path=newPhotoFileName1))
-            else:
-                FIELD2.setPixmap(pixmap2)
-                FIELD2.setScaledContents(True)
-                TOMsMessageLog.logMessage("In photoDetails. Photo2: " + str(newPhotoFileName2), level=Qgis.Info)
+
+            tab = FIELD2.parentWidget()
+            grid = FIELD2.parentWidget().layout()
+
+            photo_Widget2 = imageLabel(tab)
+            TOMsMessageLog.logMessage(
+                "In photoDetails. FIELD 2 w: {}; h: {}".format(FIELD2.width(), FIELD2.height()), level=Qgis.Info)
+            photo_Widget2.setObjectName("Photo_Widget_02")
+            photo_Widget2.setText("No photo is here")
+            #photo_Widget2 = imageLabel(tab)
+            grid.addWidget(photo_Widget2, 0, 0, 1, 1)
+
+            FIELD2.hide()
+            FIELD2.setParent(None)
+            FIELD2 = photo_Widget2
+            FIELD2.set_Pixmap(pixmap2)
+
+            TOMsMessageLog.logMessage("In photoDetails. FIELD 2 Photo2: " + str(newPhotoFileName2), level=Qgis.Info)
+            TOMsMessageLog.logMessage("In photoDetails.pixmap2 size: {}".format(pixmap2.size()),
+                                      level=Qgis.Info)
+
+            FIELD2.pixmapUpdated.connect(functools.partial(self.displayPixmapUpdated, FIELD2))
 
             if takePhoto:
                 START_CAMERA_2 = self.demandDialog.findChild(QPushButton, "startCamera2")
@@ -618,15 +638,7 @@ class FieldRestrictionTypeUtilsMixin():
                 START_CAMERA_2.clicked.connect(
                     functools.partial(self.camera2.useCamera, START_CAMERA_2, TAKE_PHOTO_2, FIELD2))
                 self.camera2.notifyPhotoTaken.connect(functools.partial(self.savePhotoTaken, idx2))
-
-        """photo_Widget3 = imageLabel()
-
-        photo_Widget3.setObjectName("Photo_Widget_03")
-        grid = self.demandDialog.findChild(QGridLayout, "gridLayout_3")
-        grid.addWidget(photo_Widget3, 0, 0, 1, 1)
-        photo_Widget3.setText("No photo")
-
-        FIELD3 = photo_Widget3"""
+                self.camera2.pixmapUpdated.connect(functools.partial(self.displayImage, FIELD2))
 
         if FIELD3:
             TOMsMessageLog.logMessage("In photoDetails. FIELD 3 exisits",
@@ -638,20 +650,29 @@ class FieldRestrictionTypeUtilsMixin():
             else:
                 newPhotoFileName3 = None
 
-            # newPhotoFileName3 = os.path.join(path_absolute, str(self.currFeature[idx3]))
-            # newPhotoFileName3 = os.path.join(path_absolute,
-            #                                 str(self.currFeature.attribute(fileName3)))
-            # newPhotoFileName3 = os.path.join(path_absolute, str(layerName + "_Photos_03"))
-
-            # TOMsMessageLog.logMessage("In photoDetails. Photo3: " + str(newPhotoFileName3), level=Qgis.Info)
             pixmap3 = QPixmap(newPhotoFileName3)
-            if pixmap3.isNull():
-                pass
-                # FIELD1.setText('Picture could not be opened ({path})'.format(path=newPhotoFileName1))
-            else:
-                FIELD3.setPixmap(pixmap3)
-                FIELD3.setScaledContents(True)
-                TOMsMessageLog.logMessage("In photoDetails. Photo3: " + str(newPhotoFileName3), level=Qgis.Info)
+                
+            tab = FIELD3.parentWidget()
+            grid = FIELD3.parentWidget().layout()
+
+            photo_Widget3 = imageLabel(tab)
+            TOMsMessageLog.logMessage(
+                "In photoDetails. FIELD 3 w: {}; h: {}".format(FIELD3.width(), FIELD3.height()), level=Qgis.Info)
+            photo_Widget3.setObjectName("Photo_Widget_03")
+            photo_Widget3.setText("No photo is here")
+            #photo_Widget3 = imageLabel(tab)
+            grid.addWidget(photo_Widget3, 0, 0, 1, 1)
+
+            FIELD3.hide()
+            FIELD3.setParent(None)
+            FIELD3 = photo_Widget3
+            FIELD3.set_Pixmap(pixmap3)
+
+            TOMsMessageLog.logMessage("In photoDetails. FIELD 3 Photo3: " + str(newPhotoFileName3), level=Qgis.Info)
+            TOMsMessageLog.logMessage("In photoDetails.pixmap3 size: {}".format(pixmap3.size()),
+                                      level=Qgis.Info)
+
+            FIELD3.pixmapUpdated.connect(functools.partial(self.displayPixmapUpdated, FIELD3))
 
             if takePhoto:
                 START_CAMERA_3 = self.demandDialog.findChild(QPushButton, "startCamera3")
@@ -662,6 +683,7 @@ class FieldRestrictionTypeUtilsMixin():
                 START_CAMERA_3.clicked.connect(
                     functools.partial(self.camera3.useCamera, START_CAMERA_3, TAKE_PHOTO_3, FIELD3))
                 self.camera3.notifyPhotoTaken.connect(functools.partial(self.savePhotoTaken, idx3))
+                self.camera3.pixmapUpdated.connect(functools.partial(self.displayImage, FIELD3))
 
         pass
 
@@ -699,6 +721,28 @@ class FieldRestrictionTypeUtilsMixin():
             return row.attribute("Description") # make assumption that only one row
 
         return None
+
+    @pyqtSlot(QPixmap)
+    def displayPixmapUpdated(self, FIELD, pixmap):
+        TOMsMessageLog.logMessage("In utils::displayPixmapUpdated ... ", level=Qgis.Info)
+        FIELD.setPixmap(pixmap)
+        FIELD.setScaledContents(True)
+        QApplication.processEvents()  # processes the event queue - https://stackoverflow.com/questions/43094589/opencv-imshow-prevents-qt-python-crashing
+
+    def displayImage(self, FIELD, pixmap):
+        TOMsMessageLog.logMessage("In utils::displayImage ... ", level=Qgis.Info)
+
+        FIELD.update_image(pixmap.scaled(FIELD.width(), FIELD.height(), QtCore.Qt.KeepAspectRatio,
+                                                transformMode=QtCore.Qt.SmoothTransformation))
+
+        QApplication.processEvents()  # processes the event queue - https://stackoverflow.com/questions/43094589/opencv-imshow-prevents-qt-python-crashing
+
+    """"@pyqtSlot(QPixmap)
+    def displayFrame(self, pixmap):
+        TOMsMessageLog.logMessage("In formCamera::displayFrame ... ", level=Qgis.Info)
+        self.FIELD.setPixmap(pixmap)
+        self.FIELD.setScaledContents(True)
+        QApplication.processEvents()  # processes the event queue - https://stackoverflow.com/questions/43094589/opencv-imshow-prevents-qt-python-crashing"""
 
     @pyqtSlot(str)
     def savePhotoTaken(self, idx, fileName):
@@ -762,4 +806,3 @@ class FieldRestrictionTypeUtilsMixin():
             return False
 
         return True
-
